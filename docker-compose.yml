@@ -1,0 +1,43 @@
+services:
+  transcribe:
+    build:
+      context: .
+      args:
+        USER_NAME: ${USER_NAME:-appuser}
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+    image: openai-audio-transcribe:dev
+    env_file:
+      - .env
+    environment:
+      OPENAI_TRANSCRIBE_MODEL: ${OPENAI_TRANSCRIBE_MODEL:-gpt-4o-transcribe}
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    volumes:
+      - ./input:/data/input
+      - ./output:/data/output
+    stdin_open: true
+    tty: true
+
+  dev:
+    build:
+      context: .
+      args:
+        USER_NAME: ${USER_NAME:-appuser}
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+    image: openai-audio-transcribe:dev
+    container_name: transcribe-dev
+    env_file:
+      - .env
+    environment:
+      OPENAI_TRANSCRIBE_MODEL: ${OPENAI_TRANSCRIBE_MODEL:-gpt-4o-transcribe}
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    working_dir: /app
+    volumes:
+      - .:/app
+      - ./input:/data/input
+      - ./output:/data/output
+    entrypoint: ["bash"]
+    command: ["-lc", "tail -f /dev/null"]
+    stdin_open: true
+    tty: true
