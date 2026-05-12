@@ -139,7 +139,7 @@ The CLI first converts the input to speech-oriented AAC in an `.m4a` container u
 - 80 kbps AAC
 - no video stream
 
-It then checks the normalized file size against a 24 MB target, leaving a margin under the 25 MB OpenAI upload limit. If the file is larger, ffmpeg `silencedetect` finds quiet ranges and the chunk planner chooses split points near silence before the estimated size limit. If a chunk still lands above 24 MB, it is split recursively until all upload files are under the target.
+It then checks the normalized file against both a 24 MB target, leaving a margin under the 25 MB OpenAI upload limit, and a 1350 second duration target, leaving a margin under the 1400 second model limit. If the file exceeds either target, ffmpeg `silencedetect` finds quiet ranges and the chunk planner chooses split points near silence before the earlier of the estimated size or duration limit. If a chunk still lands above either target, it is split recursively until all upload files are under both limits.
 
 Chunks are sent in order to the OpenAI transcription endpoint. The default model is `gpt-4o-transcribe`, configurable with `OPENAI_TRANSCRIBE_MODEL` or `--model`. Diarization uses `gpt-4o-transcribe-diarize`, `response_format=diarized_json`, and `chunking_strategy=auto`.
 

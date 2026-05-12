@@ -80,13 +80,24 @@ def plan_chunk_boundaries(
     duration_seconds: float,
     source_size_bytes: int,
     target_bytes: int,
+    target_seconds: float,
     silences: list[SilenceRange],
 ) -> list[tuple[float, float]]:
-    if source_size_bytes <= target_bytes or duration_seconds <= 0:
+    if target_seconds <= 0:
+        raise ValueError("target_seconds must be greater than zero.")
+
+    if duration_seconds <= 0:
         return [(0.0, max(0.1, duration_seconds))]
 
-    bytes_per_second = source_size_bytes / duration_seconds
-    max_duration = max(30.0, (target_bytes / bytes_per_second) * 0.95)
+    if source_size_bytes <= target_bytes and duration_seconds <= target_seconds:
+        return [(0.0, duration_seconds)]
+
+    max_duration = target_seconds
+    if source_size_bytes > target_bytes:
+        bytes_per_second = source_size_bytes / duration_seconds
+        size_limited_duration = (target_bytes / bytes_per_second) * 0.95
+        max_duration = min(max_duration, max(30.0, size_limited_duration))
+
     min_useful_duration = min(max_duration * 0.5, max(30.0, max_duration - 120.0))
 
     boundaries: list[tuple[float, float]] = []
@@ -120,9 +131,14 @@ def plan_chunk_boundaries(
     return boundaries
 
 
-def create_chunks(source: Path, chunks_dir: Path, target_bytes: int) -> list[Chunk]:
+def create_chunks(
+    source: Path,
+    chunks_dir: Path,
+    target_bytes: int,
+    target_seconds: float,
+) -> list[Chunk]:
     metadata = probe_audio(source)
-    if metadata.size_bytes <= target_bytes:
+    if metadata.size_bytes <= target_bytes and metadata.duration_seconds <= target_seconds:
         chunk_path = chunks_dir / "chunk_0001.m4a"
         extract_audio_segment(source, chunk_path, 0.0, metadata.duration_seconds)
         return [Chunk(index=1, path=chunk_path, start_seconds=0.0, end_seconds=metadata.duration_seconds)]
@@ -138,11 +154,12 @@ def create_chunks(source: Path, chunks_dir: Path, target_bytes: int) -> list[Chu
         duration_seconds=metadata.duration_seconds,
         source_size_bytes=metadata.size_bytes,
         target_bytes=target_bytes,
+        target_seconds=target_seconds,
         silences=silences,
     )
 
     chunks = _write_planned_chunks(source, chunks_dir, planned)
-    return ensure_chunks_under_limit(chunks, target_bytes, chunks_dir)
+    return ensure_chunks_under_limit(chunks, target_bytes, target_seconds, chunks_dir)
 
 
 def _write_planned_chunks(source: Path, chunks_dir: Path, planned: list[tuple[float, float]]) -> list[Chunk]:
@@ -154,32 +171,51 @@ def _write_planned_chunks(source: Path, chunks_dir: Path, planned: list[tuple[fl
     return chunks
 
 
-def ensure_chunks_under_limit(chunks: list[Chunk], target_bytes: int, chunks_dir: Path) -> list[Chunk]:
+def ensure_chunks_under_limit(
+    chunks: list[Chunk],
+    target_bytes: int,
+    target_seconds: float,
+    chunks_dir: Path,
+) -> list[Chunk]:
     output: list[Chunk] = []
     for chunk in chunks:
-        if chunk.size_bytes <= target_bytes:
+        if _chunk_within_limits(chunk, target_bytes, target_seconds):
             output.append(chunk)
             continue
 
         log(
-            f"{chunk.path.name} is {chunk.size_bytes / 1024 / 1024:.1f} MB; "
+            f"{chunk.path.name} is {chunk.size_bytes / 1024 / 1024:.1f} MB and "
+            f"{chunk.end_seconds - chunk.start_seconds:.1f}s; "
             "splitting it recursively"
         )
-        output.extend(_split_oversized_chunk(chunk, target_bytes, chunks_dir, depth=0))
+        output.extend(
+            _split_chunk_over_limit(chunk, target_bytes, target_seconds, chunks_dir, depth=0)
+        )
 
     renumbered: list[Chunk] = []
     for index, chunk in enumerate(output, start=1):
         renumbered.append(
-            Chunk(index=index, path=chunk.path, start_seconds=chunk.start_seconds, end_seconds=chunk.end_seconds)
+            Chunk(
+                index=index,
+                path=chunk.path,
+                start_seconds=chunk.start_seconds,
+                end_seconds=chunk.end_seconds,
+            )
         )
     return renumbered
 
 
-def _split_oversized_chunk(chunk: Chunk, target_bytes: int, chunks_dir: Path, depth: int) -> list[Chunk]:
-    if chunk.size_bytes <= target_bytes:
+def _split_chunk_over_limit(
+    chunk: Chunk,
+    target_bytes: int,
+    target_seconds: float,
+    chunks_dir: Path,
+    depth: int,
+) -> list[Chunk]:
+    if _chunk_within_limits(chunk, target_bytes, target_seconds):
         return [chunk]
     if depth > 10:
-        raise RuntimeError(f"Unable to split {chunk.path} below the target upload size.")
+        raise RuntimeError(f"Unable to split {chunk.path} below the target upload limits.")
 
     duration = max(0.1, chunk.end_seconds - chunk.start_seconds)
     local_silences = detect_silences(chunk.path)
@@ -199,9 +235,13 @@ def _split_oversized_chunk(chunk: Chunk, target_bytes: int, chunks_dir: Path, de
     right = Chunk(index=chunk.index, path=right_path, start_seconds=cut_absolute, end_seconds=chunk.end_seconds)
 
     return [
-        *_split_oversized_chunk(left, target_bytes, chunks_dir, depth + 1),
-        *_split_oversized_chunk(right, target_bytes, chunks_dir, depth + 1),
+        *_split_chunk_over_limit(left, target_bytes, target_seconds, chunks_dir, depth + 1),
+        *_split_chunk_over_limit(right, target_bytes, target_seconds, chunks_dir, depth + 1),
     ]
+
+
+def _chunk_within_limits(chunk: Chunk, target_bytes: int, target_seconds: float) -> bool:
+    return chunk.size_bytes <= target_bytes and chunk.end_seconds - chunk.start_seconds <= target_seconds
 
 
 def _nearest_silence_to_midpoint(silences: list[SilenceRange], midpoint: float) -> float | None:

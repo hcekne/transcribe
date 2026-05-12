@@ -7,7 +7,14 @@ from pathlib import Path
 
 from transcribe_cli.audio import convert_to_aac_m4a, probe_audio
 from transcribe_cli.chunker import create_chunks
-from transcribe_cli.config import DEFAULT_OUTPUT_DIR, TARGET_CHUNK_BYTES, load_environment, require_api_key, resolve_model
+from transcribe_cli.config import (
+    DEFAULT_OUTPUT_DIR,
+    TARGET_CHUNK_BYTES,
+    TARGET_CHUNK_SECONDS,
+    load_environment,
+    require_api_key,
+    resolve_model,
+)
 from transcribe_cli.logging_utils import log
 from transcribe_cli.output import write_outputs
 from transcribe_cli.transcriber import transcribe_chunks
@@ -73,7 +80,7 @@ def run(args: argparse.Namespace) -> None:
 
         chunks_dir = workspace / "chunks"
         log("chunking audio")
-        chunks = create_chunks(normalized_path, chunks_dir, TARGET_CHUNK_BYTES)
+        chunks = create_chunks(normalized_path, chunks_dir, TARGET_CHUNK_BYTES, TARGET_CHUNK_SECONDS)
         log(f"prepared {len(chunks)} chunk(s)")
         for chunk in chunks:
             log(
