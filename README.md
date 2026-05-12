@@ -9,7 +9,7 @@ Clone the repository and create the mounted host directories:
 ```bash
 git clone git@github.com:hcekne/transcribe.git
 cd transcribe
-mkdir -p input output
+mkdir -p input output processed
 ```
 
 Add your API key to `.env`:
@@ -18,7 +18,7 @@ Add your API key to `.env`:
 OPENAI_API_KEY=sk-your-key-here
 ```
 
-The committed `.env` file starts empty so secrets are not hardcoded. You can also export the key in your shell instead.
+`.env` is ignored by Git so secrets are not tracked. You can also export the key in your shell instead.
 
 ## Build
 
@@ -86,6 +86,49 @@ The CLI produces:
 - `output/transcript_raw.json`
 
 When `--diarize` is enabled, Markdown output uses speaker labels when the API returns speaker segments.
+
+## Input Folder Workflow
+
+For day-to-day use, copy audio files into `./input` and run:
+
+```bash
+bash scripts/transcribe_input.sh
+```
+
+The script:
+
+- scans `./input` for supported audio files
+- builds the Docker image if needed
+- transcribes each file through Docker Compose
+- writes each transcript into its own folder under `./output`
+- moves each successfully processed audio file into `./processed`
+- leaves failed files in `./input` so they can be retried
+
+Example layout after processing `interview.m4a`:
+
+```text
+input/
+processed/
+  interview.m4a
+output/
+  interview/
+    transcript_clean.md
+    transcript_raw.json
+```
+
+Any extra arguments are passed to the CLI. For diarization:
+
+```bash
+bash scripts/transcribe_input.sh \
+  --model gpt-4o-transcribe-diarize \
+  --diarize
+```
+
+To skip the automatic Docker build after the first run:
+
+```bash
+TRANSCRIBE_SKIP_BUILD=1 bash scripts/transcribe_input.sh
+```
 
 ## How It Works
 

@@ -8,7 +8,8 @@ services:
         GROUP_ID: ${GROUP_ID:-1000}
     image: openai-audio-transcribe:dev
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       OPENAI_TRANSCRIBE_MODEL: ${OPENAI_TRANSCRIBE_MODEL:-gpt-4o-transcribe}
     user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
@@ -28,7 +29,8 @@ services:
     image: openai-audio-transcribe:dev
     container_name: transcribe-dev
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       OPENAI_TRANSCRIBE_MODEL: ${OPENAI_TRANSCRIBE_MODEL:-gpt-4o-transcribe}
     user: "${USER_ID:-1000}:${GROUP_ID:-1000}"

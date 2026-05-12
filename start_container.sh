@@ -9,7 +9,7 @@ export USER_ID
 export GROUP_ID
 export USER_NAME
 
-mkdir -p input output
+mkdir -p input output processed
 
 if docker compose version >/dev/null 2>&1; then
   COMPOSE_CMD=(docker compose)
